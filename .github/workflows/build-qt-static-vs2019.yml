@@ -13,7 +13,6 @@ env:
   COMPRESSION_LEVEL: "6"
 
 jobs:
-  # 第一步：并行编译x86和x64架构
   build-qt:
     name: Qt Build (${{ matrix.arch }})
     runs-on: windows-2022
@@ -25,6 +24,13 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 安装MSVC 142工具集
+        uses: microsoft/setup-msbuild@v1
+        with:
+          vs-version: '16.0'  # VS2019版本，对应工具集v142
+          # 明确指定需要安装的组件
+          components: 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64,Microsoft.VisualStudio.Component.Windows10SDK'
 
       - name: 安装基础工具
         run: |
@@ -125,13 +131,12 @@ jobs:
           echo "ARCHIVE_NAME=$archiveName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: 保存压缩包为工件(Artifact)
-        uses: actions/upload-artifact@v4  # 升级到v4版本
+        uses: actions/upload-artifact@v4
         with:
           name: qt-builds-${{ matrix.arch }}
           path: ./${{ env.ARCHIVE_NAME }}
           retention-days: 1
 
-  # 第二步：创建Release并上传资产
   create-release:
     needs: build-qt
     runs-on: windows-2022
@@ -139,7 +144,7 @@ jobs:
 
     steps:
       - name: 下载所有架构的编译工件
-        uses: actions/download-artifact@v4  # 升级到v4版本
+        uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
