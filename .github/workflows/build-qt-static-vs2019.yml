@@ -1,65 +1,99 @@
-name: Build Static Qt 6 LTS (Release+Debug) for VS 2019
+name: Build Static Qt 6 LTS (VS2019) on Windows 2022
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   push:
     tags:
-      - 'v*'          # 标签触发（例如 v6.8.3）
+      - 'v*'
 
 env:
-  QT_VERSION: '6.8.3' # Qt 6 最新 LTS 版本（截至2025年8月）
+  QT_VERSION: '6.6.2'                     # Qt 6 最新 LTS 版本
   INSTALL_DIR: 'C:\Qt\%QT_VERSION%-msvc2019-static'
   BUILD_DIR: 'qt-build'
+  VS2019_INSTALL_DIR: 'C:\VS2019'         # VS2019 自定义安装路径
+  VS2019_TOOLS_VER: '14.29.30133'         # VS2019 工具链版本号（需根据实际安装调整）
 
 jobs:
   build-windows:
-    runs-on: windows-2019  # 预装 VS 2019 和 Ninja
+    runs-on: windows-2022
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # 安装 VS2019 构建工具链
+    - name: Install VS2019 Build Tools
+      shell: powershell
+      run: |
+        $vsInstallerPath = "$env:RUNNER_TEMP\vs_buildtools.exe"
+        Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_buildtools.exe" -OutFile $vsInstallerPath
+        
+        $installArgs = @(
+          '--quiet', '--wait', '--norestart', '--nocache',
+          '--installPath', $env:VS2019_INSTALL_DIR,
+          '--add', 'Microsoft.VisualStudio.Workload.VCTools',
+          '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+          '--add', 'Microsoft.VisualStudio.Component.Windows10SDK.19041',
+          '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project'
+        )
+        Start-Process -Wait -FilePath $vsInstallerPath -ArgumentList $installArgs
+
+    # 安装其他依赖
     - name: Install Dependencies
       shell: cmd
       run: |
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        choco install -y python --version=3.11.0  # Qt 6 需要 Python 3
+        choco install -y python --version=3.11.0
         choco install -y 7zip
+        choco install -y ninja
         set PATH=C:\Python311;%PATH%
 
+    # 下载 Qt 源码
     - name: Download Qt Sources
       shell: cmd
       run: |
         curl -L -o qt-src.zip https://download.qt.io/official_releases/qt/%QT_VERSION%.split('/')[0]/%QT_VERSION%/single/qt-everywhere-src-%QT_VERSION%.zip
         7z x qt-src.zip -oqt-src
 
-    - name: Configure Qt (Release+Debug)
+    # 严格锁定 VS2019 工具链配置
+    - name: Configure Qt (VS2019 Locked)
       shell: cmd
       run: |
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        set VS2019_TOOLS_PATH=%VS2019_INSTALL_DIR%\VC\Tools\MSVC\%VS2019_TOOLS_VER%
+        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
+
         mkdir %BUILD_DIR%
         cd %BUILD_DIR%
         ..\qt-src\configure.bat ^
           -static ^
           -prefix "%INSTALL_DIR%" ^
           -platform win32-msvc ^
-          -debug-and-release  # 同时编译 Release 和 Debug
+          -qt-host-path "%VS2019_TOOLS_PATH%" ^               # 强制指定工具链路径
+          -DCMAKE_CXX_COMPILER="%VS2019_TOOLS_PATH%\bin\Hostx64\x64\cl.exe" ^  # 双重锁定
+          -debug-and-release ^
           -nomake examples ^
           -nomake tests ^
-          -skip qtwebengine ^  # 跳过耗时模块
+          -skip qtwebengine ^
           -skip qtwebview ^
           -skip qt3d ^
           -opensource ^
           -confirm-license ^
-          -cmake-generator "Ninja" ^
-          -mp  # 启用多进程编译
+          -cmake-generator "Ninja"
 
+    # 验证编译器版本
+    - name: Verify Compiler Version
+      shell: cmd
+      run: |
+        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
+        cl.exe 2>&1 | findstr "Version 19.29" || (echo "ERROR: Wrong MSVC version detected!" && exit 1)
+        type %BUILD_DIR%\config.summary | findstr "19.29" || (echo "ERROR: Qt configured with wrong compiler!" && exit 1)
+
+    # 编译和安装
     - name: Build Qt
       shell: cmd
       run: |
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
         cd %BUILD_DIR%
-        ninja -j %NUMBER_OF_PROCESSORS%  # 使用所有 CPU 核心
+        ninja -j %NUMBER_OF_PROCESSORS%
 
     - name: Install Qt
       shell: cmd
@@ -67,6 +101,7 @@ jobs:
         cd %BUILD_DIR%
         ninja install
 
+    # 打包和上传
     - name: Package Qt
       shell: cmd
       run: |
@@ -84,9 +119,10 @@ jobs:
       with:
         files: qt-%QT_VERSION%-msvc2019-static.7z
         tag_name: ${{ github.ref_name }}
-        name: Qt ${{ env.QT_VERSION }} LTS Static (VS 2019)
+        name: Qt ${{ env.QT_VERSION }} LTS Static (VS2019)
         body: |
-          Static Qt ${{ env.QT_VERSION }} LTS (Release+Debug) for Visual Studio 2019.
-          Built on GitHub Actions (${{ github.run_id }}).
+          Strictly built with Visual Studio 2019 (MSVC v142) on Windows 2022.
+          Compiler version verified: 19.29.%VS2019_TOOLS_VER%.
+          Build ID: ${{ github.run_id }}.
           Modules included: Core, GUI, Widgets, Network, Concurrency.
           Skipped: WebEngine, 3D, Multimedia.
