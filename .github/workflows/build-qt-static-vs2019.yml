@@ -15,7 +15,8 @@ env:
 jobs:
   # 第一步：并行编译x86和x64架构
   build-qt:
-    name: Qt ${{ env.QT_VERSION }} (${{ matrix.arch }})
+    # 修复作业名称：使用固定字符串，仅保留矩阵变量
+    name: Qt Build (${{ matrix.arch }})
     runs-on: windows-2022
     strategy:
       matrix:
