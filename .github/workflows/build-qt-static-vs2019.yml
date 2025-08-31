@@ -25,12 +25,15 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装MSVC 142工具集
-        uses: microsoft/setup-msbuild@v1
+      - name: 安装VS2019及MSVC 142工具集
+        uses: actions/setup-vs@v3
         with:
-          vs-version: '16.0'  # VS2019版本，对应工具集v142
-          # 明确指定需要安装的组件
-          components: 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64,Microsoft.VisualStudio.Component.Windows10SDK'
+          vs-version: '16.0'  # VS2019版本
+          components: |
+            Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+            Microsoft.VisualStudio.Component.VC.Tools.ARM
+            Microsoft.VisualStudio.Component.Windows10SDK
+            Microsoft.VisualStudio.Component.VC.v142.x86.x64
 
       - name: 安装基础工具
         run: |
