@@ -25,15 +25,18 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装VS2019及MSVC 142工具集
-        uses: actions/setup-vs@v3
-        with:
-          vs-version: '16.0'  # VS2019版本
-          components: |
-            Microsoft.VisualStudio.Component.VC.Tools.x86.x64
-            Microsoft.VisualStudio.Component.VC.Tools.ARM
-            Microsoft.VisualStudio.Component.Windows10SDK
-            Microsoft.VisualStudio.Component.VC.v142.x86.x64
+      - name: 安装VS2019 MSVC 142工具集
+        run: |
+          # 使用Chocolatey安装VS2019的C++工具集
+          choco install -y visualstudio2019buildtools visualstudio2019-workload-vctools --package-parameters "--includeOptional --includeRecommended --installPath C:\VS2019"
+          
+          # 验证安装
+          if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
+            throw "MSVC 142工具集安装失败"
+          }
+          
+          # 添加到环境变量
+          echo "VS2019INSTALLDIR=C:\VS2019" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: 安装基础工具
         run: |
@@ -48,6 +51,8 @@ jobs:
         with:
           toolset: ${{ env.MSVC_TOOLSET }}
           arch: ${{ matrix.arch }}
+          # 指定VS2019安装路径
+          vs-path: ${{ env.VS2019INSTALLDIR }}
 
       - name: 安装对应架构的OpenSSL
         run: |
