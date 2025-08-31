@@ -26,6 +26,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref }}
+          # 修复环境变量引用语法，使用${{ }}包裹
           release_name: Qt ${{ env.QT_VERSION }} (MSVC${{ env.MSVC_TOOLSET }}-Static-OpenSSL)
           draft: false
           prerelease: false
@@ -80,12 +81,12 @@ jobs:
 
       - name: 下载Qt源代码
         run: |
-          $qtMajorMinor = $env:QT_VERSION -replace '\.\d+$', ''
-          $sourceUrl = "https://download.qt.io/official_releases/qt/$qtMajorMinor/$env:QT_VERSION/single/qt-everywhere-src-$env:QT_VERSION.zip"
+          $qtMajorMinor = "${{ env.QT_VERSION }}" -replace '\.\d+$', ''
+          $sourceUrl = "https://download.qt.io/official_releases/qt/$qtMajorMinor/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.zip"
           Invoke-WebRequest -Uri $sourceUrl -OutFile qt-source.zip -UseBasicParsing
           7z x qt-source.zip -oqt-source -y
           
-          if (-not (Test-Path "qt-source\qt-everywhere-src-$env:QT_VERSION\configure.bat")) {
+          if (-not (Test-Path "qt-source\qt-everywhere-src-${{ env.QT_VERSION }}\configure.bat")) {
             throw "Qt源码解压失败"
           }
 
