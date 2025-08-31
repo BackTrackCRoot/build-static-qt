@@ -7,11 +7,12 @@ on:
       - 'v*'
 
 env:
-  QT_VERSION: '6.6.2'                     # Qt 6 最新 LTS 版本
+  QT_VERSION: '6.8.3'                     # Qt 6 最新 LTS 版本
+  QT_MAJOR_MINOR: '6.8'                   # 手动指定主次版本（替代 split('/')[0]）
   INSTALL_DIR: 'C:\Qt\%QT_VERSION%-msvc2019-static'
   BUILD_DIR: 'qt-build'
-  VS2019_INSTALL_DIR: 'C:\VS2019'         # VS2019 自定义安装路径
-  VS2019_TOOLS_VER: '14.29.30133'         # VS2019 工具链版本号（需根据实际安装调整）
+  VS2019_INSTALL_DIR: 'C:\VS2019'
+  VS2019_TOOLS_VER: '14.29.30133'
 
 jobs:
   build-windows:
@@ -21,7 +22,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 安装 VS2019 构建工具链
     - name: Install VS2019 Build Tools
       shell: powershell
       run: |
@@ -38,7 +38,6 @@ jobs:
         )
         Start-Process -Wait -FilePath $vsInstallerPath -ArgumentList $installArgs
 
-    # 安装其他依赖
     - name: Install Dependencies
       shell: cmd
       run: |
@@ -47,14 +46,13 @@ jobs:
         choco install -y ninja
         set PATH=C:\Python311;%PATH%
 
-    # 下载 Qt 源码
+    # 修正后的下载步骤
     - name: Download Qt Sources
       shell: cmd
       run: |
-        curl -L -o qt-src.zip https://download.qt.io/official_releases/qt/%QT_VERSION%.split('/')[0]/%QT_VERSION%/single/qt-everywhere-src-%QT_VERSION%.zip
+        curl -L -o qt-src.zip https://download.qt.io/official_releases/qt/%QT_MAJOR_MINOR%/%QT_VERSION%/single/qt-everywhere-src-%QT_VERSION%.zip
         7z x qt-src.zip -oqt-src
 
-    # 严格锁定 VS2019 工具链配置
     - name: Configure Qt (VS2019 Locked)
       shell: cmd
       run: |
@@ -67,8 +65,8 @@ jobs:
           -static ^
           -prefix "%INSTALL_DIR%" ^
           -platform win32-msvc ^
-          -qt-host-path "%VS2019_TOOLS_PATH%" ^               # 强制指定工具链路径
-          -DCMAKE_CXX_COMPILER="%VS2019_TOOLS_PATH%\bin\Hostx64\x64\cl.exe" ^  # 双重锁定
+          -qt-host-path "%VS2019_TOOLS_PATH%" ^
+          -DCMAKE_CXX_COMPILER="%VS2019_TOOLS_PATH%\bin\Hostx64\x64\cl.exe" ^
           -debug-and-release ^
           -nomake examples ^
           -nomake tests ^
@@ -79,7 +77,6 @@ jobs:
           -confirm-license ^
           -cmake-generator "Ninja"
 
-    # 验证编译器版本
     - name: Verify Compiler Version
       shell: cmd
       run: |
@@ -87,7 +84,6 @@ jobs:
         cl.exe 2>&1 | findstr "Version 19.29" || (echo "ERROR: Wrong MSVC version detected!" && exit 1)
         type %BUILD_DIR%\config.summary | findstr "19.29" || (echo "ERROR: Qt configured with wrong compiler!" && exit 1)
 
-    # 编译和安装
     - name: Build Qt
       shell: cmd
       run: |
@@ -101,7 +97,6 @@ jobs:
         cd %BUILD_DIR%
         ninja install
 
-    # 打包和上传
     - name: Package Qt
       shell: cmd
       run: |
