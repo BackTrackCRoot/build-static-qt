@@ -1,4 +1,4 @@
-name: Build Static Qt (双架构同步发布)
+name: Build Static Qt (先编译后发布)
 
 on:
   push:
@@ -13,31 +13,14 @@ env:
   COMPRESSION_LEVEL: "6"
 
 jobs:
-  create-release:
-    runs-on: windows-2022
-    outputs:
-      upload_url: ${{ steps.create-release.outputs.upload_url }}
-    steps:
-      - name: 创建GitHub Release
-        id: create-release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          # 第37行修复：正确引用环境变量（无需加.env）
-          release_name: Qt ${{ env.QT_VERSION }} (MSVC${{ env.MSVC_TOOLSET }}-Static-OpenSSL)
-          draft: false
-          prerelease: false
-
+  # 第一步：并行编译x86和x64架构
   build-qt:
-    needs: create-release
-    name: Qt 6.5.3 (${{ matrix.arch }})
+    name: Qt ${{ env.QT_VERSION }} (${{ matrix.arch }})
     runs-on: windows-2022
     strategy:
       matrix:
         arch: [x64, x86]
-      fail-fast: false
+      fail-fast: false  # 单个架构失败不影响另一个，但最终发布需要两者都成功
 
     steps:
       - name: 检出代码
@@ -141,12 +124,57 @@ jobs:
           }
           echo "ARCHIVE_NAME=$archiveName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: 上传压缩包到Release
+      - name: 保存压缩包为工件(Artifact)
+        uses: actions/upload-artifact@v3
+        with:
+          name: qt-builds-${{ matrix.arch }}
+          path: ./${{ env.ARCHIVE_NAME }}
+          retention-days: 1  # 工件保留1天，足够发布步骤使用
+
+  # 第二步：只有当所有编译完成且成功后，才创建Release并上传资产
+  create-release:
+    needs: build-qt  # 依赖于build-qt作业完成
+    runs-on: windows-2022
+    if: ${{ success() }}  # 只有当所有依赖作业成功时才执行
+
+    steps:
+      - name: 下载所有架构的编译工件
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts  # 所有工件下载到artifacts目录
+
+      - name: 显示下载的工件
+        run: |
+          # 列出所有下载的文件，确认完整性
+          Get-ChildItem -Path ./artifacts -Recurse
+
+      - name: 创建GitHub Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Qt ${{ env.QT_VERSION }} (MSVC${{ env.MSVC_TOOLSET }}-Static-OpenSSL)
+          draft: false
+          prerelease: false
+
+      - name: 上传x64架构压缩包
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ env.ARCHIVE_NAME }}
-          asset_name: ${{ env.ARCHIVE_NAME }}
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/qt-builds-x64/qt-${{ env.QT_VERSION }}-msvc${{ env.MSVC_TOOLSET }}-x64-static-openssl.7z
+          asset_name: qt-${{ env.QT_VERSION }}-msvc${{ env.MSVC_TOOLSET }}-x64-static-openssl.7z
+          asset_content_type: application/x-7z-compressed
+
+      - name: 上传x86架构压缩包
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/qt-builds-x86/qt-${{ env.QT_VERSION }}-msvc${{ env.MSVC_TOOLSET }}-x86-static-openssl.7z
+          asset_name: qt-${{ env.QT_VERSION }}-msvc${{ env.MSVC_TOOLSET }}-x86-static-openssl.7z
           asset_content_type: application/x-7z-compressed
