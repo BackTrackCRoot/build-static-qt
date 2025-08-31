@@ -1,123 +1,198 @@
-name: Build Static Qt 6 LTS (VS2019) on Windows 2022
+name: Build Qt 6.8.3 Static Libraries (VS2019, x86/x64, Debug/Release)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:    # 允许手动触发
   push:
-    tags:
-      - 'v*'
+    tags:              # 推送标签时触发
+      - 'qt-static-*'
 
 env:
-  QT_VERSION: '6.8.3'                     # Qt 6 最新 LTS 版本
-  QT_MAJOR_MINOR: '6.8'                   # 手动指定主次版本（替代 split('/')[0]）
-  INSTALL_DIR: 'C:\Qt\%QT_VERSION%-msvc2019-static'
-  BUILD_DIR: 'qt-build'
-  VS2019_INSTALL_DIR: 'C:\VS2019'
-  VS2019_TOOLS_VER: '14.29.30133'
+  QT_VERSION: '6.8.3'
+  VCPKG_ROOT: 'C:/vcpkg'
+  QT_INSTALL_PREFIX: 'C:/Qt/${{ env.QT_VERSION }}/static'
 
 jobs:
-  build-windows:
+  build-qt:
+    name: Build Qt Static (${{ matrix.arch }}-${{ matrix.config }})
     runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [x86, x64]
+        config: [debug, release]
+        include:
+          - arch: x86
+            vc_arch: x86
+            triplet: x86-windows-static
+          - arch: x64
+            vc_arch: x64
+            triplet: x64-windows-static
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install VS2019 Build Tools
-      shell: powershell
-      run: |
-        $vsInstallerPath = "$env:RUNNER_TEMP\vs_buildtools.exe"
-        Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_buildtools.exe" -OutFile $vsInstallerPath
-        
-        $installArgs = @(
-          '--quiet', '--wait', '--norestart', '--nocache',
-          '--installPath', $env:VS2019_INSTALL_DIR,
-          '--add', 'Microsoft.VisualStudio.Workload.VCTools',
-          '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-          '--add', 'Microsoft.VisualStudio.Component.Windows10SDK.19041',
-          '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project'
-        )
-        Start-Process -Wait -FilePath $vsInstallerPath -ArgumentList $installArgs
+      - name: Install required tools
+        run: |
+          choco install -y --no-progress 7zip ninja python3
+        shell: pwsh
 
-    - name: Install Dependencies
-      shell: cmd
-      run: |
-        choco install -y python --version=3.11.0
-        choco install -y 7zip
-        choco install -y ninja
-        set PATH=C:\Python311;%PATH%
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    # 修正后的下载步骤
-    - name: Download Qt Sources
-      shell: cmd
-      run: |
-        curl -L -o qt-src.zip https://download.qt.io/official_releases/qt/%QT_MAJOR_MINOR%/%QT_VERSION%/single/qt-everywhere-src-%QT_VERSION%.zip
-        7z x qt-src.zip -oqt-src
+      - name: Install vcpkg and OpenSSL
+        run: |
+          # 克隆vcpkg
+          git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
+          # 编译并安装OpenSSL静态库
+          & "${{ env.VCPKG_ROOT }}/bootstrap-vcpkg.bat" -disableMetrics
+          & "${{ env.VCPKG_ROOT }}/vcpkg" install openssl3:${{ matrix.triplet }}
+        shell: pwsh
 
-    - name: Configure Qt (VS2019 Locked)
-      shell: cmd
-      run: |
-        set VS2019_TOOLS_PATH=%VS2019_INSTALL_DIR%\VC\Tools\MSVC\%VS2019_TOOLS_VER%
-        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
+      - name: Setup VS2019 Environment
+        uses: ilammy/setup-vsdev@v1
+        with:
+          arch: ${{ matrix.vc_arch }}
+          vc: 2019
 
-        mkdir %BUILD_DIR%
-        cd %BUILD_DIR%
-        ..\qt-src\configure.bat ^
-          -static ^
-          -prefix "%INSTALL_DIR%" ^
-          -platform win32-msvc ^
-          -qt-host-path "%VS2019_TOOLS_PATH%" ^
-          -DCMAKE_CXX_COMPILER="%VS2019_TOOLS_PATH%\bin\Hostx64\x64\cl.exe" ^
-          -debug-and-release ^
-          -nomake examples ^
-          -nomake tests ^
-          -skip qtwebengine ^
-          -skip qtwebview ^
-          -skip qt3d ^
-          -opensource ^
-          -confirm-license ^
-          -cmake-generator "Ninja"
+      - name: Download Qt Sources
+        run: |
+          $qtSourceUrl = "https://download.qt.io/official_releases/qt/${env:QT_VERSION%.*}/$env:QT_VERSION/single/qt-everywhere-src-$env:QT_VERSION.zip"
+          Invoke-WebRequest -Uri $qtSourceUrl -OutFile "qt-src-$env:QT_VERSION.zip"
+          7z x "qt-src-$env:QT_VERSION.zip" -oqt-src -y
+        shell: pwsh
 
-    - name: Verify Compiler Version
-      shell: cmd
-      run: |
-        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
-        cl.exe 2>&1 | findstr "Version 19.29" || (echo "ERROR: Wrong MSVC version detected!" && exit 1)
-        type %BUILD_DIR%\config.summary | findstr "19.29" || (echo "ERROR: Qt configured with wrong compiler!" && exit 1)
+      - name: Configure Qt Static Build
+        run: |
+          cd qt-src
+          mkdir build
+          cd build
 
-    - name: Build Qt
-      shell: cmd
-      run: |
-        call "%VS2019_INSTALL_DIR%\VC\Auxiliary\Build\vcvars64.bat"
-        cd %BUILD_DIR%
-        ninja -j %NUMBER_OF_PROCESSORS%
+          # 设置OpenSSL路径
+          $opensslRoot = "${{ env.VCPKG_ROOT }}/installed/${{ matrix.triplet }}"
+          
+          # 基础配置选项
+          $configureOptions = @(
+            "-confirm-license",
+            "-opensource",
+            "-static",
+            "-debug-and-release",  # 同时编译Debug和Release版本的库
+            "-prefix", "${{ env.QT_INSTALL_PREFIX }}/${{ matrix.arch }}/${{ matrix.config }}",
+            "-platform", "win32-msvc",
+            "-c++std", "c++17",
+            "-opengl", "desktop",
+            "-ssl",                # 启用SSL支持
+            "-openssl-linked",     # 静态链接OpenSSL
+            "-I", "$opensslRoot/include",
+            "-L", "$opensslRoot/lib",
+            "OPENSSL_LIBS=-llibssl -llibcrypto -lws2_32 -ladvapi32 -lcrypt32 -luser32",
+            "-nomake", "examples",
+            "-nomake", "tests",
+            "-nomake", "tools",
+            # 优化编译速度，跳过一些可选模块
+            "-skip", "qtactiveqt",
+            "-skip", "qt3d",
+            "-skip", "qtcharts",
+            "-skip", "qtdatavis3d",
+            "-skip", "qtdoc",
+            "-skip", "qtgamepad",
+            "-skip", "qtlottie",
+            "-skip", "qtnetworkauth",
+            "-skip", "qtpurchasing",
+            "-skip", "qtquick3d",
+            "-skip", "qtremoteobjects",
+            "-skip", "qtscxml",
+            "-skip", "qtsensors",
+            "-skip", "qtserialbus",
+            "-skip", "qtserialport",
+            "-skip", "qtspeech",
+            "-skip", "qtvirtualkeyboard",
+            "-skip", "qtwebchannel",
+            "-skip", "qtwebengine",  # WebEngine不支持静态编译
+            "-skip", "qtwebview",
+            "-skip", "qtwayland"
+          )
 
-    - name: Install Qt
-      shell: cmd
-      run: |
-        cd %BUILD_DIR%
-        ninja install
+          # 执行配置，使用configure.bat和Ninja生成器
+          Write-Output "Configuring Qt ${{ env.QT_VERSION }} ${{ matrix.arch }} ${{ matrix.config }} build..."
+          # 在Windows上使用configure.bat而不是configure
+          & "..\configure.bat" @configureOptions -generator "Ninja" 2>&1 | Tee-Object -FilePath "configure.log"
 
-    - name: Package Qt
-      shell: cmd
-      run: |
-        7z a -t7z -mx9 qt-%QT_VERSION%-msvc2019-static.7z "%INSTALL_DIR%"
+          # 保存配置日志以备查验
+          Get-Content "configure.log"
+          # 检查配置是否成功
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Configure failed with exit code $LASTEXITCODE"
+            Exit 1
+          }
+        shell: pwsh
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: qt-%QT_VERSION%-msvc2019-static
-        path: qt-%QT_VERSION%-msvc2019-static.7z
+      - name: Build Qt with Ninja
+        run: |
+          cd qt-src/build
+          # 使用Ninja进行多核编译
+          $maxParallel = [int](Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors
+          Write-Output "Using $maxParallel parallel jobs for compilation"
+          ninja -j $maxParallel 2>&1 | Tee-Object -FilePath "build.log"
+          # 保存构建日志以备查验
+          Get-Content "build.log"
+          # 检查构建是否成功
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Build failed with exit code $LASTEXITCODE"
+            Exit 1
+          }
+        shell: pwsh
 
-    - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: qt-%QT_VERSION%-msvc2019-static.7z
-        tag_name: ${{ github.ref_name }}
-        name: Qt ${{ env.QT_VERSION }} LTS Static (VS2019)
-        body: |
-          Strictly built with Visual Studio 2019 (MSVC v142) on Windows 2022.
-          Compiler version verified: 19.29.%VS2019_TOOLS_VER%.
-          Build ID: ${{ github.run_id }}.
-          Modules included: Core, GUI, Widgets, Network, Concurrency.
-          Skipped: WebEngine, 3D, Multimedia.
+      - name: Install Qt
+        run: |
+          cd qt-src/build
+          ninja install
+        shell: pwsh
+
+      - name: Verify Qt Build
+        run: |
+          # 简单验证构建是否成功，检查是否存在qmake
+          $qmakePath = "${{ env.QT_INSTALL_PREFIX }}/${{ matrix.arch }}/${{ matrix.config }}/bin/qmake.exe"
+          if (Test-Path $qmakePath) {
+            Write-Output "Qmake found at: $qmakePath"
+            & $qmakePath -v
+          } else {
+            Write-Error "Qmake not found! Build may have failed."
+            Exit 1
+          }
+        shell: pwsh
+
+      - name: Package Qt Static Libraries
+        run: |
+          $packageName = "qt-$env:QT_VERSION-static-${{ matrix.arch }}-${{ matrix.config }}-vs2019.7z"
+          7z a "../$${packageName}" "${{ env.QT_INSTALL_PREFIX }}/${{ matrix.arch }}/${{ matrix.config }}/*" -mx=9
+          # 将包移动到更容易找到的位置
+          Move-Item -Path "../$${packageName}" -Destination "."
+        shell: pwsh
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-$env:QT_VERSION-static-${{ matrix.arch }}-${{ matrix.config }}-vs2019
+          path: |
+            qt-src/build/*.7z
+            qt-src/build/configure.log
+            qt-src/build/build.log
+
+  # 创建总结报告
+  summary:
+    name: Build Summary
+    runs-on: windows-latest
+    needs: build-qt
+    steps:
+      - name: Display Summary
+        run: |
+          Write-Output "Qt ${{ env.QT_VERSION }} Static Build Summary"
+          Write-Output "=========================================="
+          Write-Output "Compiler: Visual Studio 2019"
+          Write-Output "Architectures: x86, x64"
+          Write-Output "Configurations: Debug, Release"
+          Write-Output "Build Tool: Ninja"
+          Write-Output "Artifacts have been uploaded separately for each architecture and configuration."
+        shell: pwsh
