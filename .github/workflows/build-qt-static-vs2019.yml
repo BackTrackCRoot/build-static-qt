@@ -32,7 +32,7 @@ jobs:
 
   build-qt:
     needs: create-release
-    name: Qt ${{ env.QT_VERSION }} (${{ matrix.arch }})
+    name: Qt 6.5.3 (${{ matrix.arch }})
     runs-on: windows-2022
     strategy:
       matrix:
