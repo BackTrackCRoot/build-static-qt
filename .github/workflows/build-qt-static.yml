@@ -3,7 +3,6 @@ on: [push]
 
 jobs:
   build-static-Qt:
-  name: build static Qt
   runs-on: windows-2022
 
   steps:
