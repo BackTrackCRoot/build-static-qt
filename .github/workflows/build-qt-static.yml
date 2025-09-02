@@ -47,5 +47,6 @@ jobs:
       - name: Set toolset v142
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          toolset: ${{ env.MSVC_TOOLSET }}
+          arch: "x64"
+          toolset: "14.2"
           vs-path: "C:\\VS2019"
