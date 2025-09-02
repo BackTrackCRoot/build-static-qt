@@ -20,7 +20,7 @@ jobs:
                   "--installPath", "C:\VS2019",
                   "--add", "Microsoft.VisualStudio.Component.VC.140",
                   "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC",
-                  "--add", ""Microsoft.VisualStudio.Component.VC.CLI.Support"",
+                  "--add", "Microsoft.VisualStudio.Component.VC.CLI.Support",
                   "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC.Spectre",
                   "--add", "Microsoft.VisualStudio.Component.VC.Redist.MSM",
                   "--add", "Microsoft.VisualStudio.Component.VC.v141.x86.x64",
