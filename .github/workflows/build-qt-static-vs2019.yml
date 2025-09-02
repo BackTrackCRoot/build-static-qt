@@ -25,18 +25,40 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装VS2019 MSVC 142工具集
-        run: |
-          # 使用Chocolatey安装VS2019的C++工具集
-          choco install -y visualstudio2019buildtools visualstudio2019-workload-vctools --package-parameters "--includeOptional --includeRecommended --installPath C:\VS2019"
-          
-          # 验证安装
-          if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
-            throw "MSVC 142工具集安装失败"
-          }
-          
-          # 添加到环境变量
-          echo "VS2019INSTALLDIR=C:\VS2019" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: 安装VS2019及MSVC 142工具集（包含ATL和MFC）
+        continueOnError: false
+        enabled: true
+        displayName: Install VS2019 with MSVC 142, ATL and MFC build tools
+        uses: Microsoft/powershell@v1
+        with:
+          targetType: inline
+          showWarnings: true
+          script: |
+            echo "Download vs_enterprise.exe for VS2019"
+            # VS2019的版本号是16，VS2022是17
+            Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_enterprise.exe" -OutFile "vs_enterprise.exe"
+            
+            echo "Install VS2019 with required components"
+            $process = Start-Process -FilePath "./vs_enterprise.exe" -ArgumentList @(
+                "modify",
+                "--installPath", "C:\VS2019",
+                "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "--add", "Microsoft.VisualStudio.Component.VC.Tools.ARM",
+                "--add", "Microsoft.VisualStudio.Component.VC.Tools.ARM64",
+                "--add", "Microsoft.VisualStudio.Component.VC.ATL",
+                "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC",
+                "--add", "Microsoft.VisualStudio.Component.VC.Redist.14.Latest",
+                "--add", "Microsoft.VisualStudio.ComponentGroup.VC.Tools.142.x86.x64",
+                "--passive", "--norestart", "--quiet"
+            ) -Wait -PassThru
+            Write-Output "安装程序退出代码: $($process.ExitCode)"
+
+            # 验证安装是否成功
+            if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
+              throw "MSVC 142工具集安装失败"
+            }
+            
+            echo "VS2019及所需工具集安装完成"
 
       - name: 安装基础工具
         run: |
@@ -52,7 +74,7 @@ jobs:
           toolset: ${{ env.MSVC_TOOLSET }}
           arch: ${{ matrix.arch }}
           # 指定VS2019安装路径
-          vs-path: ${{ env.VS2019INSTALLDIR }}
+          vs-path: "C:\\VS2019"
 
       - name: 安装对应架构的OpenSSL
         run: |
