@@ -14,6 +14,8 @@ jobs:
               Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_enterprise.exe" -OutFile "vs_enterprise.exe" -UseBasicParsing
 
               echo "Install VS2019 with required components"
+              $stdoutFile = "C:\temp\stdout.txt"
+              $stderrFile = "C:\temp\stderr.txt"
               $process = Start-Process -FilePath "./vs_enterprise.exe" -ArgumentList @(
                   "modify",
                   "--installPath", "C:\VS2019",
@@ -21,9 +23,11 @@ jobs:
                   "--add", "Microsoft.VisualStudio.Component.VC.ATL",
                   "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC",
                   "--add", "Microsoft.VisualStudio.Component.VC.Redist.14.Latest",
-                  "--passive", "--norestart"
+                  "--passive", "--norestart", "-RedirectStandardOutput $stdoutFile", "-RedirectStandardError $stderrFile"
               ) -Wait -PassThru
 
+              Write-Host "标准输出：`n$output"
+              Write-Host "错误输出：`n$errorOutput"
               Write-Output "VS2019安装程序退出代码: $($process.ExitCode)"
 
               Get-ChildItem -Path "C:\VS2019"
