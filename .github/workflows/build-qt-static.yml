@@ -3,7 +3,8 @@ on: [push]
 
 jobs:
   build-static-Qt:
-  runs-on: windows-2022
+    name: build static Qt
+    runs-on: windows-2022
 
   steps:
     - name: Install vs2019 toolset
