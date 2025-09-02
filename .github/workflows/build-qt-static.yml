@@ -1,0 +1,36 @@
+name: Build Static Qt LTS
+on: [push]
+
+jobs:
+  build-static-Qt:
+  name: build static Qt
+  runs-on: windows-2022
+
+  steps:
+    - name: Install vs2019 toolset
+      shell： pwsh
+      run: |
+        echo "Download vs_enterprise.exe for VS2019 (version 16)"
+            Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vs_enterprise.exe" -OutFile "vs_enterprise.exe" -UseBasicParsing
+            
+            echo "Install VS2019 with required components"
+            $process = Start-Process -FilePath "./vs_enterprise.exe" -ArgumentList @(
+                "modify",
+                "--installPath", "C:\VS2019",
+                "--add", "Microsoft.VisualStudio.ComponentGroup.VC.Tools.142.x86.x64",
+                "--add", "Microsoft.VisualStudio.Component.VC.ATL",
+                "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC",
+                "--add", "Microsoft.VisualStudio.Component.VC.Redist.14.Latest",
+                "--passive", "--norestart"
+            ) -Wait -PassThru
+            
+            Write-Output "VS2019安装程序退出代码: $($process.ExitCode)"
+            if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
+              throw "MSVC 142工具集安装失败，未找到编译器cl.exe"
+            }
+            echo "VS2019及所需组件安装完成"
+    - name: Set toolset v142
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        toolset: ${{ env.MSVC_TOOLSET }}
+        vs-path: "C:\\VS2019"
