@@ -26,8 +26,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装VS2019及MSVC 142工具集（包含ATL和MFC）
-        continueOnError: false
-        enabled: true
         displayName: Install VS2019 with MSVC 142, ATL and MFC build tools
         uses: Microsoft/powershell@v1
         with:
