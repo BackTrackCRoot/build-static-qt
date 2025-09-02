@@ -30,6 +30,7 @@ jobs:
                   "--add", "Microsoft.VisualStudio.Component.VC.v141.MFC.Spectre",
                   "--add", "Microsoft.VisualStudio.Component.VC.14.25.x86.x64",
                   "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041",
+                  "--add", "Microsoft.VisualStudio.Workload.NativeDesktop"
                   "--passive", "--norestart"
               ) -Wait -PassThru 
 
@@ -40,6 +41,9 @@ jobs:
               Get-ChildItem -Path "C:\"
               Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\"
 
+              if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
+                throw "MSVC 142工具集安装失败，未找到编译器cl.exe"
+              }
               echo "VS2019及所需组件安装完成"
       - name: Set toolset v142
         uses: ilammy/msvc-dev-cmd@v1
