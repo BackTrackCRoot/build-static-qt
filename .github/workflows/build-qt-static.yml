@@ -25,6 +25,9 @@ jobs:
               ) -Wait -PassThru
 
               Write-Output "VS2019安装程序退出代码: $($process.ExitCode)"
+
+              Get-ChildItem -Path "C:\VS2019"
+
               if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
                 throw "MSVC 142工具集安装失败，未找到编译器cl.exe"
               }
