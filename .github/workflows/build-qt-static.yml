@@ -16,7 +16,7 @@ jobs:
               echo "Install VS2019 with required components"
 
               $process = Start-Process -FilePath "./vs_enterprise.exe" -ArgumentList @(
-                  "modify",
+                  "install",
                   "--installPath", "C:\VS2019",
                   "--add", "Microsoft.VisualStudio.Component.VC.140",
                   "--add", "Microsoft.VisualStudio.Component.VC.ATLMFC",
