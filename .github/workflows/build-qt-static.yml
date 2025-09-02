@@ -35,6 +35,7 @@ jobs:
 
               Write-Output "VS2019安装程序退出代码: $($process.ExitCode)"
 
+              Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\"
               Get-ChildItem -Path "C:\Program Files (x86)\Microsoft Visual Studio\"
               Get-ChildItem -Path "C:\"
               Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\"
