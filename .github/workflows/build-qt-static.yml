@@ -7,7 +7,15 @@ jobs:
     runs-on: windows-2022
 
     steps:
+      - name: Cache MSVC 2019 toolset
+        id: cache-vs2019
+        uses: actions/cache@v4
+        with:
+          path: C:\VS2019
+          key: vs2019-denpends
+
       - name: Install vs2019 toolset
+        if: steps.cache-vs2019.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           echo "Download vs_enterprise.exe for VS2019 (version 16)"
@@ -115,17 +123,23 @@ jobs:
 
               Write-Output "VS2019安装程序退出代码: $($process.ExitCode)"
 
-              Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\"
-              Get-ChildItem -Path "C:\Program Files (x86)\Microsoft Visual Studio\"
-              Get-ChildItem -Path "C:\"
-              Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\"
+              # Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\"
+              # Get-ChildItem -Path "C:\Program Files (x86)\Microsoft Visual Studio\"
+              # Get-ChildItem -Path "C:\"
+              # Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\"
 
-              Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\"
+              # Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\"
 
-              # if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
-              #   throw "MSVC 142工具集安装失败，未找到编译器cl.exe"
-              # }
+              if (-not (Test-Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\cl.exe")) {
+                throw "MSVC 142工具集安装失败，未找到编译器cl.exe"
+              }
               echo "VS2019及所需组件安装完成"
+
+      - name: Test vs2019
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "C:\VS2019\VC\Tools\MSVC\14.29.30133\bin\Hostx64\x64\"
+
       - name: Set toolset v142
         uses: TheMrMilchmann/setup-msvc-dev@v4
         with:
