@@ -12,7 +12,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\VS2019
-          key: vs2019-denpends
+          key: vs2019-depends
 
       - name: Install vs2019 toolset
         if: steps.cache-vs2019.outputs.cache-hit != 'true'
