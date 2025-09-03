@@ -109,6 +109,7 @@ jobs:
                   "--add", "Microsoft.VisualStudio.Workload.VisualStudioExtension",
                   "--add", "Component.MDD.Linux",
                   "--add", "Component.MDD.Linux.GCC.arm"
+                  "--allWorkloads", "--includeRecommended", "--remove Component.CPython3.x64",
                   "--passive", "--norestart"
               ) -Wait -PassThru 
 
